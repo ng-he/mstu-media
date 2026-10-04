@@ -2,6 +2,12 @@
 name = "mstu-media"
 version = "0.1.0"
 edition = "2024"
+description = "Media helpers shared by mstu plugins: codecs, four-character codes and NAL units."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/ng-he/mstu-media"
+readme = "README.md"
+keywords = ["media", "codec", "h264", "nalu"]
+categories = ["multimedia"]
 
 [dependencies]
 thiserror = "2.0.18"
