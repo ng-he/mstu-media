@@ -1,9 +1,9 @@
 use crate::codec::{
-    Codec::{AAC, H264, H265, TTXT, VP9},
+    Codec::{AAC, AV1, H264, H265, TTXT, VP9},
     MediaType::{Audio, Subtitle, Video},
     audio::aac,
     subtitle::ttxt,
-    video::{h264, h265, vp9},
+    video::{av1, h264, h265, vp9},
 };
 
 pub mod audio;
@@ -15,6 +15,7 @@ pub enum Codec {
     H264(h264::Parameters),
     H265(h265::Parameters),
     VP9(vp9::Parameters),
+    AV1(av1::Parameters),
 
     // Audio
     AAC(aac::Parameters),
@@ -35,6 +36,7 @@ impl Codec {
             H264(_) => Video,
             H265(_) => Video,
             VP9(_) => Video,
+            AV1(_) => Video,
 
             AAC(_) => Audio,
 
