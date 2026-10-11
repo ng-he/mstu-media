@@ -52,7 +52,10 @@ mod tests {
 
     #[test]
     fn takes_four_bytes_and_no_other_count() {
-        assert_eq!(FourCC::try_from(&b"moov"[..]).unwrap(), FourCC::from(*b"moov"));
+        assert_eq!(
+            FourCC::try_from(&b"moov"[..]).unwrap(),
+            FourCC::from(*b"moov")
+        );
         assert!(FourCC::try_from(&b"moo"[..]).is_err());
         assert!(FourCC::try_from(&b"moovv"[..]).is_err());
     }
