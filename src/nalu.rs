@@ -162,3 +162,80 @@ impl Nalu {
         result
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::vec;
+
+    use super::*;
+
+    /// Two units of 2 and 3 bytes, each behind a 4-byte length.
+    fn avcc() -> Vec<u8> {
+        vec![0, 0, 0, 2, 0x65, 0x88, 0, 0, 0, 3, 0x41, 0x9a, 0x02]
+    }
+
+    #[test]
+    fn rewrites_every_length_into_a_start_code() {
+        let mut data = avcc();
+
+        assert!(avcc_to_annexb_in_place(&mut data));
+        assert_eq!(
+            data,
+            vec![0, 0, 0, 1, 0x65, 0x88, 0, 0, 0, 1, 0x41, 0x9a, 0x02]
+        );
+    }
+
+    #[test]
+    fn refuses_a_length_running_past_the_end() {
+        let mut data = vec![0, 0, 0, 9, 0x65, 0x88];
+
+        assert!(!avcc_to_annexb_in_place(&mut data));
+    }
+
+    #[test]
+    fn refuses_a_sample_too_short_to_hold_a_length() {
+        let mut data = vec![0, 0, 1];
+
+        assert!(!avcc_to_annexb_in_place(&mut data));
+    }
+
+    #[test]
+    fn an_empty_sample_is_nothing_to_rewrite() {
+        assert!(avcc_to_annexb_in_place(&mut []));
+    }
+
+    #[test]
+    fn copies_when_the_prefix_is_shorter_than_a_start_code() {
+        // The same two units, behind 2-byte lengths.
+        let data = vec![0, 2, 0x65, 0x88, 0, 3, 0x41, 0x9a, 0x02];
+
+        let annexb = avcc_to_annexb(data, 2).expect("well formed");
+
+        assert_eq!(
+            annexb,
+            vec![0, 0, 0, 1, 0x65, 0x88, 0, 0, 0, 1, 0x41, 0x9a, 0x02]
+        );
+    }
+
+    #[test]
+    fn refuses_a_prefix_length_no_sample_uses() {
+        assert!(avcc_to_annexb(vec![0, 0, 0, 1], 0).is_none());
+        assert!(avcc_to_annexb(vec![0, 0, 0, 1], 5).is_none());
+    }
+
+    #[test]
+    fn finds_units_behind_either_start_code() {
+        let data = [0, 0, 0, 1, 0x67, 0x42, 0, 0, 1, 0x68, 0xce, 0x3c];
+
+        let nalus = Nalu::from_annexb(&data);
+
+        assert_eq!(nalus.len(), 2);
+        assert_eq!(nalus[0].as_bytes(), &[0x67, 0x42]);
+        assert_eq!(nalus[1].as_bytes(), &[0x68, 0xce, 0x3c]);
+    }
+
+    #[test]
+    fn finds_nothing_where_no_start_code_is() {
+        assert!(Nalu::from_annexb(&[0x67, 0x42, 0x80]).is_empty());
+    }
+}

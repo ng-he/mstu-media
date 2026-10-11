@@ -39,3 +39,26 @@ impl fmt::Display for FourCC {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reads_as_the_four_characters_it_holds() {
+        assert_eq!(FourCC::from(*b"avc1").as_str(), "avc1");
+        assert_eq!(FourCC::from(*b"av01").to_string(), "av01");
+    }
+
+    #[test]
+    fn takes_four_bytes_and_no_other_count() {
+        assert_eq!(FourCC::try_from(&b"moov"[..]).unwrap(), FourCC::from(*b"moov"));
+        assert!(FourCC::try_from(&b"moo"[..]).is_err());
+        assert!(FourCC::try_from(&b"moovv"[..]).is_err());
+    }
+
+    #[test]
+    fn says_so_rather_than_panicking_on_bytes_that_are_not_text() {
+        assert_eq!(FourCC::from([0xff, 0xfe, 0xfd, 0xfc]).as_str(), "????");
+    }
+}
