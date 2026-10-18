@@ -2,12 +2,16 @@
 name = "mstu-media"
 version = "0.1.0"
 edition = "2024"
-description = "Media helpers shared by mstu plugins: codecs, four-character codes and NAL units."
+description = "Media helpers shared by mstu plugins: codecs, NAL units, RTP and SDP."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/ng-he/mstu-media"
 readme = "README.md"
-keywords = ["media", "codec", "h264", "nalu"]
+keywords = ["media", "codec", "h264", "rtp", "sdp"]
 categories = ["multimedia"]
+
+[features]
+# Media built byte by byte, for a plugin's tests as well as this crate's.
+fixture = []
 
 [dependencies]
 thiserror = "2.0.18"

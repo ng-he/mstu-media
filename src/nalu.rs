@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use bytes::Bytes;
 
 pub const START_CODE: [u8; 4] = [0, 0, 0, 1];
@@ -89,6 +91,56 @@ pub fn avcc_to_annexb(mut data: Vec<u8>, length_size: usize) -> Option<Vec<u8>> 
     Some(annexb)
 }
 
+/// Where each unit of an Annex-B stream lies, so whoever holds the bytes can
+/// slice them without copying.
+///
+/// Start codes of three bytes and of four are both read, since a stream may
+/// carry either.
+pub fn annexb_ranges(data: &[u8]) -> Vec<Range<usize>> {
+    let mut ranges: Vec<Range<usize>> = Vec::new();
+    let mut at = 0;
+
+    while at < data.len() {
+        let start = match data[at..] {
+            [0, 0, 0, 1, ..] => Some(4),
+            [0, 0, 1, ..] => Some(3),
+            _ => None,
+        };
+
+        let Some(code) = start else {
+            at += 1;
+            continue;
+        };
+
+        // The unit before this start code ends where this one begins.
+        if let Some(last) = ranges.last_mut() {
+            last.end = at;
+        }
+
+        at += code;
+        ranges.push(at..data.len());
+    }
+
+    ranges.retain(|range| !range.is_empty());
+    ranges
+}
+
+/// An Annex-B stream of `units`, each behind a start code.
+pub fn annexb_of<'a>(units: impl IntoIterator<Item = &'a [u8]>) -> Vec<u8> {
+    let mut annexb = Vec::new();
+
+    for unit in units {
+        if unit.is_empty() {
+            continue;
+        }
+
+        annexb.extend_from_slice(&START_CODE);
+        annexb.extend_from_slice(unit);
+    }
+
+    annexb
+}
+
 /// Raw Network Abstraction Layer Unit (NALU).
 /// This type stores only the raw NAL payload itself.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -125,41 +177,15 @@ impl Nalu {
         self.0
     }
 
+    /// The units of an Annex-B stream, each copied out of it.
+    ///
+    /// `annexb_ranges` says where they are; this is for a caller that wants
+    /// them to outlive the bytes they came from.
     pub fn from_annexb(data: &[u8]) -> Vec<Self> {
-        let mut result = Vec::new();
-        let mut start = None;
-        let mut i = 0;
-
-        while i < data.len() {
-            let sc_len = if data[i..].starts_with(&[0, 0, 0, 1]) {
-                Some(4)
-            } else if data[i..].starts_with(&[0, 0, 1]) {
-                Some(3)
-            } else {
-                None
-            };
-
-            if let Some(len) = sc_len {
-                if let Some(s) = start {
-                    if s < i {
-                        result.push(Self::from(&data[s..i]));
-                    }
-                }
-
-                start = Some(i + len);
-                i += len;
-            } else {
-                i += 1;
-            }
-        }
-
-        if let Some(s) = start {
-            if s < data.len() {
-                result.push(Self::from(&data[s..]));
-            }
-        }
-
-        result
+        annexb_ranges(data)
+            .into_iter()
+            .map(|range| Self::from(&data[range]))
+            .collect()
     }
 }
 
@@ -168,6 +194,50 @@ mod tests {
     use std::vec;
 
     use super::*;
+
+    #[test]
+    fn the_units_of_a_stream_are_found_without_copying_it() {
+        let stream = [
+            0, 0, 0, 1, 0x67, 0x64, 0, 0, 1, 0x68, 0xee, 0, 0, 0, 1, 0x65, 9,
+        ];
+        let ranges = annexb_ranges(&stream);
+
+        assert_eq!(ranges.len(), 3, "{ranges:?}");
+        assert_eq!(&stream[ranges[0].clone()], &[0x67, 0x64]);
+        assert_eq!(
+            &stream[ranges[1].clone()],
+            &[0x68, 0xee],
+            "a three byte code"
+        );
+        assert_eq!(&stream[ranges[2].clone()], &[0x65, 9]);
+    }
+
+    #[test]
+    fn a_stream_of_no_units_has_no_ranges() {
+        assert!(annexb_ranges(&[]).is_empty());
+        assert!(
+            annexb_ranges(&[0, 0, 0, 1]).is_empty(),
+            "a code and nothing after it"
+        );
+        assert!(annexb_ranges(&[9, 9, 9]).is_empty(), "no code at all");
+    }
+
+    #[test]
+    fn units_go_back_into_a_stream_behind_their_start_codes() {
+        let annexb = annexb_of([[0x67u8, 1].as_slice(), [0x68, 2].as_slice()]);
+
+        assert_eq!(annexb, [0, 0, 0, 1, 0x67, 1, 0, 0, 0, 1, 0x68, 2]);
+
+        let ranges = annexb_ranges(&annexb);
+
+        assert_eq!(ranges.len(), 2, "and come back out the same way");
+        assert_eq!(&annexb[ranges[0].clone()], &[0x67, 1]);
+    }
+
+    #[test]
+    fn an_empty_unit_is_not_written() {
+        assert!(annexb_of([[].as_slice()]).is_empty());
+    }
 
     /// Two units of 2 and 3 bytes, each behind a 4-byte length.
     fn avcc() -> Vec<u8> {
